@@ -45,7 +45,7 @@ func main() {
 
 func serve(server *dns.Server) {
 	// TODO: Add configurable port
-	addr, err := net.ResolveUDPAddr("udp", ":8080")
+	addr, err := net.ResolveUDPAddr("udp", "127.0.0.1:8080")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -64,7 +64,7 @@ func serve(server *dns.Server) {
 	log.Println("Listening on UDP port 8080")
 	buf := make([]byte, 512)
 	for {
-		n, _, err := conn.ReadFromUDP(buf)
+		n, clientAddr, err := conn.ReadFromUDP(buf)
 		if err != nil {
 			log.Println(err)
 			continue
@@ -79,6 +79,6 @@ func serve(server *dns.Server) {
 			if err != nil {
 				log.Println(err)
 			}
-		}(n, bytes.Clone(buf[:n]), addr)
+		}(n, bytes.Clone(buf[:n]), clientAddr)
 	}
 }
