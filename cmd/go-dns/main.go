@@ -11,34 +11,21 @@ import (
 )
 
 func main() {
-	//addr, err := net.ResolveUDPAddr("udp", ":8080")
-	//if err != nil {
-	//	log.Fatal("Error resolving address:", err)
-	//}
-	//
-	//conn, err := net.ListenUDP("udp", addr)
-	//if err != nil {
-	//	log.Fatal("Error listening:", err)
-	//}
-	//defer conn.Close()
-	//
-	//fmt.Printf("UDP server listening on %s\n", conn.LocalAddr().String())
-	//
-	//buffer := make([]byte, 1024)
-	//for {
-	//	n, remoteAddr, err := conn.ReadFromUDP(buffer)
-	//	if err != nil {
-	//		fmt.Println("Error reading from UPD:", err)
-	//		continue
-	//	}
-	//
-	//	message := string(buffer[:n])
-	//	fmt.Printf("Received %d bytes from %s: %s\n", n, remoteAddr, message)
-	//}
 	log.SetOutput(os.Stdout)
-	server := dns.NewServer(
+
+	providers := []dns.ResourceProvider{
 		provider.NewStaticProvider(),
-	)
+	}
+
+	if len(os.Args) >= 2 {
+		p, err := provider.NewFileProvider(os.Args[1])
+		if err != nil {
+			log.Println(err)
+		}
+		providers = append(providers, p)
+	}
+
+	server := dns.NewServer(providers...)
 
 	serve(server)
 }
