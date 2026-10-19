@@ -102,25 +102,25 @@ func TestParseName(t *testing.T) {
 	tests := []struct {
 		name    string
 		input   []byte
-		want    string
+		want    []byte
 		wantEnd int
 		wantOK  bool
 	}{
-		{"root", []byte{0x00}, "", 1, true},
+		{"root", []byte{0x00}, nil, 1, true},
 		{
 			"multiple labels",
 			[]byte{3, 'w', 'w', 'w', 7, 'e', 'x', 'a', 'm', 'p', 'l', 'e', 3, 'c', 'o', 'm', 0},
-			"www.example.com", 17, true,
+			[]byte("www.example.com"), 17, true,
 		},
-		{"reserved label type", []byte{0x40, 0x00}, "", 0, false},
-		{"truncated label", []byte{5, 'a', 'b'}, "", 0, false},
-		{"empty input", nil, "", 0, false},
+		{"reserved label type", []byte{0x40, 0x00}, nil, 0, false},
+		{"truncated label", []byte{5, 'a', 'b'}, nil, 0, false},
+		{"empty input", nil, nil, 0, false},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got, end, ok := parseName(tt.input, 0)
-			if got != tt.want || end != tt.wantEnd || ok != tt.wantOK {
+			if !bytes.Equal(got, tt.want) || end != tt.wantEnd || ok != tt.wantOK {
 				t.Fatalf("parseName = (%q, %d, %v), want (%q, %d, %v)",
 					got, end, ok, tt.want, tt.wantEnd, tt.wantOK)
 			}
@@ -133,7 +133,7 @@ func TestParseNameCompression(t *testing.T) {
 	msg := append([]byte{0x03, 'w', 'w', 'w', 0x00}, namePtr(0)...)
 
 	got, end, ok := parseName(msg, 5)
-	if !ok || got != "www" || end != 7 {
+	if !ok || !bytes.Equal(got, []byte("www")) || end != 7 {
 		t.Fatalf("parseName = (%q, %d, %v), want (%q, 7, true)", got, end, ok, "www")
 	}
 }
@@ -163,8 +163,8 @@ func TestParseQuestions(t *testing.T) {
 	q := ParseQuery(&msg)
 
 	want := []Question{
-		{qname: "example.com", qtype: 1, qclass: 1},
-		{qname: "example.org", qtype: 28, qclass: 1},
+		{Qname: "example.com", Qtype: 1, Qclass: 1},
+		{Qname: "example.org", Qtype: 28, Qclass: 1},
 	}
 	if !reflect.DeepEqual(q.questions, want) {
 		t.Fatalf("questions = %+v, want %+v", q.questions, want)
@@ -183,19 +183,19 @@ func TestParseRecords(t *testing.T) {
 
 	q := ParseQuery(&msg)
 
-	wantAnswer := ResourceRecord{name: "example.com", recordType: 1, class: 1, ttl: 300, rdlength: 4, rdata: string([]byte{192, 0, 2, 1})}
-	if len(q.answer.content) != 1 || q.answer.content[0] != wantAnswer {
-		t.Fatalf("answer = %+v, want [%+v]", q.answer.content, wantAnswer)
+	wantAnswer := ResourceRecord{name: []byte("example.com"), recordType: 1, class: 1, ttl: 300, rdlength: 4, rdata: []byte{192, 0, 2, 1}}
+	if len(q.answer.content) != 1 || !reflect.DeepEqual(q.answer.content[0], wantAnswer) {
+		t.Fatalf("answer = %+v, want %+v", q.answer.content, wantAnswer)
 	}
 
-	wantAuth := ResourceRecord{name: "example.com", recordType: 2, class: 1, ttl: 60, rdlength: uint16(len(nsRdata)), rdata: string(nsRdata)}
-	if len(q.authority.content) != 1 || q.authority.content[0] != wantAuth {
-		t.Fatalf("authority = %+v, want [%+v]", q.authority.content, wantAuth)
+	wantAuth := ResourceRecord{name: []byte("example.com"), recordType: 2, class: 1, ttl: 60, rdlength: uint16(len(nsRdata)), rdata: nsRdata}
+	if len(q.authority.content) != 1 || !reflect.DeepEqual(q.authority.content[0], wantAuth) {
+		t.Fatalf("authority = %+v, want %+v", q.authority.content, wantAuth)
 	}
 
-	wantAdd := ResourceRecord{name: "example.org", recordType: 1, class: 1, ttl: 30, rdlength: 4, rdata: string([]byte{192, 0, 2, 2})}
-	if len(q.additional.content) != 1 || q.additional.content[0] != wantAdd {
-		t.Fatalf("additional = %+v, want [%+v]", q.additional.content, wantAdd)
+	wantAdd := ResourceRecord{name: []byte("example.org"), recordType: 1, class: 1, ttl: 30, rdlength: 4, rdata: []byte{192, 0, 2, 2}}
+	if len(q.additional.content) != 1 || !reflect.DeepEqual(q.additional.content[0], wantAdd) {
+		t.Fatalf("additional = %+v, want %+v", q.additional.content, wantAdd)
 	}
 }
 
@@ -220,16 +220,16 @@ func TestRoundTrip(t *testing.T) {
 			qdcount: 1, ancount: 1, nscount: 1, arcount: 1,
 		},
 		questions: []Question{
-			{qname: "example.com", qtype: 1, qclass: 1},
+			{Qname: "example.com", Qtype: 1, Qclass: 1},
 		},
 		answer: Answer{content: []ResourceRecord{
-			{name: "example.com", recordType: 1, class: 1, ttl: 300, rdlength: 4, rdata: string([]byte{192, 0, 2, 1})},
+			{name: []byte("example.com"), recordType: 1, class: 1, ttl: 300, rdlength: 4, rdata: []byte{192, 0, 2, 1}},
 		}},
 		authority: Authority{content: []ResourceRecord{
-			{name: "example.com", recordType: 2, class: 1, ttl: 60, rdlength: 14, rdata: "ns.example.com"},
+			{name: []byte("example.com"), recordType: 2, class: 1, ttl: 60, rdlength: 14, rdata: []byte("ns.example.com")},
 		}},
 		additional: Additional{content: []ResourceRecord{
-			{name: "", recordType: 41, class: 4096, ttl: 0, rdlength: 0, rdata: ""},
+			{name: nil, recordType: 41, class: 4096, ttl: 0, rdlength: 0, rdata: nil},
 		}},
 	}
 

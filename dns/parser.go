@@ -1,8 +1,8 @@
 package dns
 
 import (
+	"bytes"
 	"encoding/binary"
-	"strings"
 )
 
 // ParseQuery parses a DNS message from its wire representation into a Query.
@@ -118,9 +118,9 @@ func parseQuestion(data []byte, offset int) (Question, int, bool) {
 		return q, 0, false
 	}
 
-	q.qname = name
-	q.qtype = binary.BigEndian.Uint16(data[next : next+2])
-	q.qclass = binary.BigEndian.Uint16(data[next+2 : next+4])
+	q.Qname = string(name)
+	q.Qtype = binary.BigEndian.Uint16(data[next : next+2])
+	q.Qclass = binary.BigEndian.Uint16(data[next+2 : next+4])
 	return q, next + 4, true
 }
 
@@ -152,7 +152,7 @@ func parseRecords(data []byte, offset *int, count int) []ResourceRecord {
 			class:      class,
 			ttl:        ttl,
 			rdlength:   uint16(rdlength),
-			rdata:      string(data[*offset : *offset+rdlength]),
+			rdata:      append([]byte(nil), data[*offset:*offset+rdlength]...),
 		})
 		*offset += rdlength
 	}
@@ -160,28 +160,28 @@ func parseRecords(data []byte, offset *int, count int) []ResourceRecord {
 }
 
 // parseName reads a possibly-compressed domain name starting at offset and
-// returns the name, the offset immediately after the name, and whether parsing
-// succeeded.
-func parseName(data []byte, offset int) (string, int, bool) {
-	labels := make([]string, 0, 4)
+// returns the name as dotted bytes, the offset immediately after the name, and
+// whether parsing succeeded.
+func parseName(data []byte, offset int) ([]byte, int, bool) {
+	var name []byte
 	pos := offset
 	endOffset := -1
 	visited := make(map[int]bool)
 
 	for {
 		if pos < 0 || pos >= len(data) {
-			return "", 0, false
+			return nil, 0, false
 		}
 		length := int(data[pos])
 
 		if length&0xC0 == 0xC0 {
 			// Compression pointer (top two bits set).
 			if pos+1 >= len(data) {
-				return "", 0, false
+				return nil, 0, false
 			}
 			target := int(binary.BigEndian.Uint16(data[pos:pos+2]) & 0x3FFF)
 			if visited[target] {
-				return "", 0, false // pointer loop
+				return nil, 0, false // pointer loop
 			}
 			visited[target] = true
 			if endOffset == -1 {
@@ -192,30 +192,36 @@ func parseName(data []byte, offset int) (string, int, bool) {
 		}
 
 		if length&0xC0 != 0 {
-			return "", 0, false // reserved label type
+			return nil, 0, false // reserved label type
 		}
 
 		pos++
 		if length == 0 {
 			break // root / end of name
 		}
-		if length > 63 || pos+length > len(data) || len(labels) >= 127 {
-			return "", 0, false
+		if pos+length > len(data) {
+			return nil, 0, false
 		}
-		labels = append(labels, string(data[pos:pos+length]))
+		if len(name)+1+length > 255 {
+			return nil, 0, false // name would exceed the 255-octet limit
+		}
+		if len(name) > 0 {
+			name = append(name, '.')
+		}
+		name = append(name, data[pos:pos+length]...)
 		pos += length
 	}
 
 	if endOffset == -1 {
 		endOffset = pos
 	}
-	return strings.Join(labels, "."), endOffset, true
+	return name, endOffset, true
 }
 
 func appendQuestion(buf []byte, q Question) []byte {
-	buf = appendName(buf, q.qname)
-	buf = binary.BigEndian.AppendUint16(buf, q.qtype)
-	buf = binary.BigEndian.AppendUint16(buf, q.qclass)
+	buf = appendName(buf, []byte(q.Qname))
+	buf = binary.BigEndian.AppendUint16(buf, q.Qtype)
+	buf = binary.BigEndian.AppendUint16(buf, q.Qclass)
 	return buf
 }
 
@@ -229,11 +235,12 @@ func appendResourceRecord(buf []byte, rr ResourceRecord) []byte {
 	return buf
 }
 
-func appendName(buf []byte, name string) []byte {
-	if name == "" {
+// appendName encodes a dotted name (as bytes) into DNS wire format.
+func appendName(buf []byte, name []byte) []byte {
+	if len(name) == 0 {
 		return append(buf, 0)
 	}
-	for _, label := range strings.Split(name, ".") {
+	for _, label := range bytes.Split(name, []byte(".")) {
 		buf = append(buf, byte(len(label)))
 		buf = append(buf, label...)
 	}

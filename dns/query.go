@@ -18,18 +18,18 @@ type Header struct {
 }
 
 type Question struct {
-	qname  string
-	qtype  uint16 // TODO: add an alternative type
-	qclass uint16
+	Qname  string
+	Qtype  uint16 // TODO: add an alternative type
+	Qclass uint16
 }
 
 type ResourceRecord struct {
-	name       string
+	name       []byte
 	recordType uint16
 	class      uint16
 	ttl        uint32
 	rdlength   uint16
-	rdata      string
+	rdata      []byte
 }
 
 type Answer struct {

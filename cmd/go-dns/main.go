@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"github.com/anishchenkoivan/go-dns/dns"
+	"github.com/anishchenkoivan/go-dns/dns/provider"
 )
 
 func main() {
@@ -35,7 +36,9 @@ func main() {
 	//	fmt.Printf("Received %d bytes from %s: %s\n", n, remoteAddr, message)
 	//}
 	log.SetOutput(os.Stdout)
-	server := dns.NewServer()
+	server := dns.NewServer(
+		provider.NewStaticProvider(),
+	)
 
 	serve(server)
 }
